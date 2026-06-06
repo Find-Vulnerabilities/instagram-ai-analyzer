@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram AI Analyzer | Post & Comment Summarizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            padding: 20px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .input-field {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .input-field label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .input-field input, .input-field select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        .input-field input:focus, .input-field select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .analyze-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            align-self: flex-end;
+        }
+        
+        .analyze-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+        }
+        
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #e1e1e1;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .result-section {
+            margin-top: 30px;
+        }
+        
+        .result-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .result-card h3 {
+            color: #667eea;
+            margin-bottom: 12px;
+            font-size: 1.2rem;
+        }
+        
+        .result-card p {
+            color: #444;
+            line-height: 1.6;
+        }
+        
+        .post-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            background: #e8eef5;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .post-info-item {
+            text-align: center;
+        }
+        
+        .post-info-label {
+            font-size: 0.85rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .post-info-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .error {
+            background: #fee;
+            border-left-color: #dc3545;
+        }
+        
+        .error h3 {
+            color: #dc3545;
+        }
+        
+        .topic-list, .opinion-list, .quote-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .topic-list li, .opinion-list li, .quote-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e1e1e1;
+        }
+        
+        .topic-list li:last-child, .opinion-list li:last-child, .quote-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .quote-list li {
+            font-style: italic;
+            color: #555;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            margin-right: 8px;
+        }
+        
+        footer {
+            text-align: center;
+            color: white;
+            padding: 20px;
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            .card {
+                padding: 20px;
+            }
+            .post-info {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📸 Instagram AI Analyzer</h1>
+            <p>Powered by Google Gemini AI • Analyze posts and extract key insights from comments</p>
+        </div>
+        
+        <div class="card">
+            <div class="input-group">
+                <div class="input-field" style="flex: 2;">
+                    <label>Instagram Post URL</label>
+                    <input type="text" id="postUrl" placeholder="https://www.instagram.com/p/..." value="https://www.instagram.com/p/">
+                </div>
+                <div class="input-field">
+                    <label>Comment Limit</label>
+                    <select id="commentLimit">
+                        <option value="50">50 comments</option>
+                        <option value="100" selected>100 comments</option>
+                        <option value="200">200 comments</option>
+                        <option value="500">500 comments</option>
+                    </select>
+                </div>
+                <div class="input-field">
+                    <label>Include Replies</label>
+                    <select id="includeReplies">
+                        <option value="true" selected>Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+                <button class="analyze-btn" id="analyzeBtn">🔍 Analyze Post</button>
+            </div>
+        </div>
+        
+        <div id="loading" class="card loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Fetching post data and analyzing comments with Gemini AI...</p>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 10px;">This may take 15-30 seconds depending on comment volume</p>
+        </div>
+        
+        <div id="results" class="result-section"></div>
+        
+        <footer>
+            ⚠️ Uses unofficial Instagram API. For research purposes only. Respect Instagram's Terms of Service.
+        </footer>
+    </div>
+    
+    <script>
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const postUrlInput = document.getElementById('postUrl');
+        const commentLimitSelect = document.getElementById('commentLimit');
+        const includeRepliesSelect = document.getElementById('includeReplies');
+        const loadingDiv = document.getElementById('loading');
+        const resultsDiv = document.getElementById('results');
+        
+        analyzeBtn.addEventListener('click', async () => {
+            const postUrl = postUrlInput.value.trim();
+            
+            if (!postUrl || !postUrl.includes('instagram.com/p/')) {
+                alert('Please enter a valid Instagram post URL');
+                return;
+            }
+            
+            // Show loading, hide previous results
+            loadingDiv.style.display = 'block';
+            resultsDiv.innerHTML = '';
+            analyzeBtn.disabled = true;
+            
+            const payload = {
+                post_url: postUrl,
+                comment_limit: parseInt(commentLimitSelect.value),
+                include_replies: includeRepliesSelect.value === 'true'
+            };
+            
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Analysis failed');
+                }
+                
+                displayResults(data);
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="card result-card error">
+                        <h3>⚠️ Error</h3>
+                        <p>${error.message}</p>
+                        <p style="font-size: 0.85rem; margin-top: 10px;">Possible causes: Invalid URL, Instagram login failed, or Gemini API not configured.</p>
+                    </div>
+                `;
+            } finally {
+                loadingDiv.style.display = 'none';
+                analyzeBtn.disabled = false;
+            }
+        });
+        
+        function displayResults(data) {
+            if (!data.success) {
+                resultsDiv.innerHTML = `
+                    <div class="card result-card error">
+                        <h3>⚠️ Analysis Failed</h3>
+                        <p>${data.error || 'Unknown error occurred'}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const summary = data.summary;
+            const post = data.post;
+            
+            let html = `
+                <div class="card">
+                    <h2 style="margin-bottom: 20px;">📊 Analysis Results</h2>
+                    
+                    <div class="post-info">
+                        <div class="post-info-item">
+                            <div class="post-info-label">👤 Author</div>
+                            <div class="post-info-value">@${post.username}</div>
+                        </div>
+                        <div class="post-info-item">
+                            <div class="post-info-label">❤️ Likes</div>
+                            <div class="post-info-value">${post.like_count.toLocaleString()}</div>
+                        </div>
+                        <div class="post-info-item">
+                            <div class="post-info-label">💬 Comments</div>
+                            <div class="post-info-value">${post.comment_count.toLocaleString()}</div>
+                        </div>
+                        <div class="post-info-item">
+                            <div class="post-info-label">🤖 Analyzed</div>
+                            <div class="post-info-value">${data.comments_analyzed}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="result-card">
+                        <h3>📝 Post Caption</h3>
+                        <p>${escapeHtml(post.caption) || '(No caption)'}</p>
+                    </div>
+                    
+                    <div class="result-card">
+                        <h3>📌 Post Overview</h3>
+                        <p>${escapeHtml(summary.post_overview) || 'Summary generated but no overview text available.'}</p>
+                    </div>
+            `;
+            
+            if (summary.sentiment_analysis) {
+                html += `
+                    <div class="result-card">
+                        <h3>💭 Sentiment Analysis</h3>
+                        <p>${escapeHtml(summary.sentiment_analysis)}</p>
+                    </div>
+                `;
+            }
+            
+            if (summary.key_topics && summary.key_topics.length > 0) {
+                html += `
+                    <div class="result-card">
+                        <h3>🏷️ Key Topics Discussed</h3>
+                        <ul class="topic-list">
+                            ${summary.key_topics.map(topic => `<li>🎯 ${escapeHtml(topic)}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            if (summary.popular_opinions && summary.popular_opinions.length > 0) {
+                html += `
+                    <div class="result-card">
+                        <h3>🗣️ Popular Opinions</h3>
+                        <ul class="opinion-list">
+                            ${summary.popular_opinions.map(opinion => `<li>💡 ${escapeHtml(opinion)}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            if (summary.notable_quotes && summary.notable_quotes.length > 0) {
+                html += `
+                    <div class="result-card">
+                        <h3>📌 Notable Quotes</h3>
+                        <ul class="quote-list">
+                            ${summary.notable_quotes.map(quote => `<li>“${escapeHtml(quote)}”</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            if (summary.controversial_points && summary.controversial_points.length > 0) {
+                html += `
+                    <div class="result-card">
+                        <h3>⚡ Controversial Points</h3>
+                        <ul class="topic-list">
+                            ${summary.controversial_points.map(point => `<li>⚠️ ${escapeHtml(point)}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    <div class="result-card" style="background: #e8eef5;">
+                        <p style="font-size: 0.85rem; color: #666; margin: 0;">
+                            <span class="badge">🧠 Model: ${summary.model_used || 'gemini-2.5-flash'}</span>
+                            <span class="badge">⏱️ Processing: ${data.processing_time_ms}ms</span>
+                            <span class="badge">💬 Comments analyzed: ${data.comments_analyzed}</span>
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+    </script>
+</body>
+</html>
