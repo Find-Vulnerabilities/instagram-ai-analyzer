@@ -90,8 +90,12 @@ class InstagrapiAdapter(InstagramClient):
             
             # Save session for future use
             if self._session_file:
-                self.client.dump_settings(self._session_file)
-                logger.info("Saved session to file")
+                try:
+                    self.client.dump_settings(self._session_file)
+                    logger.info("Session saved to file")
+                except Exception as e:
+                    logger.warning(f"Failed to save session: {e}")
+                
                 
             logger.info(f"Successfully logged in as {username}")
             return True
@@ -219,7 +223,7 @@ class InstagrapiAdapter(InstagramClient):
                         replies = self.client.media_comment_replies(
                             int(post_id), 
                             int(comment_data.pk),
-                            amount=min(reply_count, 50)  # 限制最大回复数
+                            amount=min(reply_count, 50)  # Maximum number of replies
                         )
                         for reply_data in replies:
                             reply = Comment(

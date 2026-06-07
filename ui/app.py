@@ -1,11 +1,13 @@
 """
-Main Flask/Dash web application for Instagram AI Analyzer.
+Main Flask web application for Instagram AI Analyzer.
 Provides a web interface for analyzing Instagram posts and their comments.
 """
 
 import logging
 import os
 from typing import Optional
+
+from flask import Flask, render_template, request, jsonify
 
 from core.instagram_client import InstagramClientError
 from core.instagrapi_adapter import InstagrapiAdapter
@@ -28,17 +30,19 @@ def create_app():
     Returns:
         Flask: Configured Flask application instance
     """
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='../templates')
     app.config['SECRET_KEY'] = os.urandom(24)
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
     
     # Initialize global components
-    instagram_client = None
     summarizer = None
     
     if settings.GEMINI_API_KEY:
-        summarizer = CommentSummarizer()
-        logger.info("Summarizer initialized with Gemini API")
+        try:
+            summarizer = CommentSummarizer()
+            logger.info("Summarizer initialized with Gemini API")
+        except Exception as e:
+            logger.error(f"Failed to initialize summarizer: {e}")
     else:
         logger.warning("No Gemini API key found. AI features will be disabled.")
     
@@ -78,7 +82,7 @@ def create_app():
         if not summarizer:
             return jsonify({
                 'success': False,
-                'error': 'Gemini API is not configured. Please set GEMINI_API_KEY.'
+                'error': 'Gemini API is not configured. Please set GEMINI_API_KEY in .env file.'
             }), 503
         
         # Validate Instagram credentials
@@ -107,13 +111,7 @@ def create_app():
                 include_replies=include_replies
             )
             
-            if post.error:
-                return jsonify({
-                    'success': False,
-                    'error': post.error
-                }), 404
-            
-            logger.info(f"Fetched post by {post.info.username} with {len(post.comments)} comments")
+            logger.info(f"Fetched post by @{post.info.username} with {len(post.comments)} comments")
             
             # Generate AI summary
             logger.info("Generating AI summary...")
@@ -124,7 +122,7 @@ def create_app():
                 'success': summary.is_successful,
                 'post': {
                     'username': post.info.username,
-                    'caption': post.info.caption[:500],
+                    'caption': post.info.caption[:500] if post.info.caption else '',
                     'like_count': post.info.like_count,
                     'comment_count': post.info.comment_count,
                     'url': post.url,
@@ -137,6 +135,7 @@ def create_app():
             
             if summary.error:
                 response['error'] = summary.error
+                response['success'] = False
             
             return jsonify(response)
             
@@ -156,7 +155,10 @@ def create_app():
             
         finally:
             if instagram_client:
-                instagram_client.close()
+                try:
+                    instagram_client.close()
+                except Exception as e:
+                    logger.warning(f"Error closing Instagram client: {e}")
     
     @app.route('/api/health', methods=['GET'])
     def health_check():
@@ -165,7 +167,17 @@ def create_app():
             'status': 'ok',
             'gemini_configured': bool(settings.GEMINI_API_KEY),
             'instagram_configured': bool(settings.INSTAGRAM_USERNAME and settings.INSTAGRAM_PASSWORD),
+            'flask_debug': settings.FLASK_DEBUG,
+            'flask_port': settings.FLASK_PORT,
         })
+    
+    @app.route('/api/config/status', methods=['GET'])
+    def config_status():
+        """
+        Detailed configuration status endpoint.
+        Useful for debugging configuration issues.
+        """
+        return jsonify(settings.get_status_dict())
     
     # Register error handlers
     @app.errorhandler(404)
@@ -176,6 +188,10 @@ def create_app():
     def server_error(error):
         return jsonify({'success': False, 'error': 'Internal server error'}), 500
     
+    @app.errorhandler(405)
+    def method_not_allowed(error):
+        return jsonify({'success': False, 'error': 'Method not allowed'}), 405
+    
     return app
 
 
@@ -183,25 +199,45 @@ def main():
     """Run the Flask application."""
     app = create_app()
     
-    # Validate configuration
+    # Validate configuration and print warnings
+    print("\n" + "="*50)
+    print("Instagram AI Analyzer - Starting Up")
+    print("="*50)
+    
     if not settings.INSTAGRAM_USERNAME or not settings.INSTAGRAM_PASSWORD:
-        logger.warning(
-            "Instagram credentials not configured. "
-            "Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env file."
-        )
+        print("⚠️  WARNING: Instagram credentials not configured.")
+        print("   Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env file.")
+        print("   Post fetching will fail without valid credentials.\n")
+    else:
+        print(f"✅ Instagram credentials configured for: {settings.INSTAGRAM_USERNAME}\n")
     
     if not settings.GEMINI_API_KEY:
-        logger.warning(
-            "Gemini API key not configured. "
-            "Set GEMINI_API_KEY in .env file. AI features will be disabled."
-        )
+        print("⚠️  WARNING: Gemini API key not configured.")
+        print("   Set GEMINI_API_KEY in .env file.")
+        print("   AI summarization features will be disabled.\n")
+    else:
+        print(f"✅ Gemini API key configured (using model: {settings.GEMINI_MODEL})\n")
     
-    logger.info(f"Starting Instagram AI Analyzer on port {settings.FLASK_PORT}")
-    app.run(
-        host='0.0.0.0',
-        port=settings.FLASK_PORT,
-        debug=settings.FLASK_DEBUG
-    )
+    print(f"🚀 Starting server on http://0.0.0.0:{settings.FLASK_PORT}")
+    print(f"📊 Debug mode: {'ON' if settings.FLASK_DEBUG else 'OFF'}")
+    print("="*50 + "\n")
+    
+    try:
+        app.run(
+            host='0.0.0.0',
+            port=settings.FLASK_PORT,
+            debug=settings.FLASK_DEBUG
+        )
+    except OSError as e:
+        if "Address already in use" in str(e):
+            print(f"\n❌ ERROR: Port {settings.FLASK_PORT} is already in use.")
+            print(f"   Either stop the other process or change FLASK_PORT in .env file.\n")
+        raise
+    except KeyboardInterrupt:
+        print("\n\n👋 Shutting down gracefully...")
+    except Exception as e:
+        print(f"\n❌ Fatal error: {e}\n")
+        raise
 
 
 if __name__ == '__main__':

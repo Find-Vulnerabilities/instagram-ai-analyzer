@@ -4,10 +4,12 @@ Loads environment variables and provides application settings.
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 
 class Settings:
@@ -19,7 +21,8 @@ class Settings:
     
     # Gemini AI settings
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+   
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
     
     # Application settings
     FLASK_DEBUG: bool = os.getenv("FLASK_DEBUG", "False").lower() == "true"
@@ -32,14 +35,8 @@ class Settings:
     
     @classmethod
     def validate(cls) -> bool:
-        """
-        Validate that required settings are configured.
-        
-        Returns:
-            bool: True if critical settings (Gemini API) are configured
-        """
+        """Validate that required settings are configured."""
         valid = True
-        
         
         def color_text(text, color_code):
             try:
@@ -53,7 +50,6 @@ class Settings:
             print(color_text("   ❌ ERROR: GEMINI_API_KEY not set. AI features will not work.", "91"))
             valid = False
         else:
-            
             key_preview = cls.GEMINI_API_KEY[:8] + "..." if len(cls.GEMINI_API_KEY) > 8 else "***"
             print(color_text(f"   ✅ GEMINI_API_KEY is configured ({key_preview})", "92"))
         
@@ -65,6 +61,7 @@ class Settings:
         print(f"   ✅ Summary max length: {cls.SUMMARY_MAX_LENGTH}")
         print(f"   ✅ Flask debug mode: {'ON' if cls.FLASK_DEBUG else 'OFF'}")
         print(f"   ✅ Flask port: {cls.FLASK_PORT}")
+        print(f"   ✅ Gemini model: {cls.GEMINI_MODEL}")
         
         return valid
     
@@ -77,6 +74,7 @@ class Settings:
             "flask_debug": cls.FLASK_DEBUG,
             "flask_port": cls.FLASK_PORT,
             "summary_max_length": cls.SUMMARY_MAX_LENGTH,
+            "gemini_model": cls.GEMINI_MODEL,
         }
 
 

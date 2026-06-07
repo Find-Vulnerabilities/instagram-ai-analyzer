@@ -6,6 +6,8 @@ Structures for Gemini AI summarization outputs.
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from config import settings
+
 
 @dataclass
 class KeyPoint:
@@ -48,7 +50,7 @@ class SummaryResult:
     reply_highlights: List[str] = field(default_factory=list)
     controversial_points: List[str] = field(default_factory=list)
     processing_time_ms: int = 0
-    model_used: str = "gemini-2.5-flash"
+    model_used: str = field(default_factory=lambda: settings.GEMINI_MODEL)
     raw_response: str = ""
     error: Optional[str] = None
     

@@ -69,7 +69,7 @@ class GeminiClient:
         Args:
             prompt: The input prompt for the model
             temperature: Controls randomness (0.0 to 1.0)
-            max_output_tokens: Maximum length of response
+            max_output_tokens: Maximum length of response in TOKENS
             
         Returns:
             str: Generated text response
@@ -98,6 +98,7 @@ class GeminiClient:
             logger.error(f"Gemini generation failed: {e}")
             raise GeminiClientError(f"Failed to generate content: {str(e)}")
     
+    # 注意：以下方法必须在类内部，且缩进正确（4个空格）
     def generate_structured_summary(
         self,
         post_caption: str,
@@ -110,7 +111,7 @@ class GeminiClient:
         Args:
             post_caption: The original post caption
             comments: List of Comment objects
-            max_length: Approximate maximum summary length
+            max_length: Approximate maximum summary length in CHARACTERS
             
         Returns:
             str: Structured summary text
@@ -125,13 +126,22 @@ class GeminiClient:
         
         comments_text = "\n".join(comment_texts)
         
+        # Truncate comments if they exceed the max prompt size
+        MAX_PROMPT_CHARS = 30000
+        if len(comments_text) > MAX_PROMPT_CHARS:
+            comments_text = comments_text[:MAX_PROMPT_CHARS] + "\n...[truncated]"
+            logger.warning(f"Comments truncated to {MAX_PROMPT_CHARS} characters")
+        
+        # Truncate caption to reasonable length (handle None case)
+        truncated_caption = (post_caption[:1000] if post_caption else "")
+        
         prompt = f"""You are an expert social media analyst. Analyze the following Instagram post and its comments, then provide a comprehensive summary.
 
 ## POST CAPTION:
-{post_caption}
+{truncated_caption}
 
 ## COMMENTS ({len(comment_texts)} comments):
-{comments_text[:8000]}
+{comments_text}
 
 ## TASK:
 Analyze the above content and provide a structured summary in the following format. Write thorough, detailed analysis for each section:
@@ -152,5 +162,8 @@ Analyze the above content and provide a structured summary in the following form
 
 Please write naturally and thoroughly. The summary should be substantive and provide real insight into the community's reaction to this post.
 """
+
+        max_tokens = max(1024, min(8192, max_length // 2))
+        logger.info(f"Summary request: max_length={max_length} chars -> max_output_tokens={max_tokens}")
         
-        return self.generate_text(prompt, temperature=0.5, max_output_tokens=max_length)
+        return self.generate_text(prompt, temperature=0.5, max_output_tokens=max_tokens)
