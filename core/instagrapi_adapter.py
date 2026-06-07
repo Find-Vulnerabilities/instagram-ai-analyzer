@@ -363,12 +363,6 @@ class InstagrapiAdapter(InstagramClient):
     def close(self) -> None:
         """Close the client connection and clean up resources."""
         if self._client:
-            # instagrapi doesn't have an explicit close method
-            # but we can clear the client
             self._client = None
         self._is_logged_in = False
         logger.info("Instagrapi adapter closed")
-            # instagrapi doesn't have an explicit close method
-            # but we can clear the client
-            self._client = None
-        self._is_logged_in = False

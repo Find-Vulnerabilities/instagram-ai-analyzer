@@ -10,8 +10,7 @@ from typing import Optional
 from flask import Flask, render_template, request, jsonify
 
 from core.instagram_client import InstagramClientError
-from core.graph_api_adapter import GraphAPIAdapter, get_business_account_id
-from core.instagrapi_adapter import InstagrapiAdapter  # Legacy fallback
+from core.instagrapi_adapter import InstagrapiAdapter
 from config.settings import settings
 from core.summarizer import CommentSummarizer
 from models.summary import SummaryResult
@@ -31,7 +30,7 @@ def create_app():
     Returns:
         Flask: Configured Flask application instance
     """
-    app = Flask(__name__,template_folder='.')
+    app = Flask(__name__, template_folder='.')
     app.config['SECRET_KEY'] = os.urandom(24)
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
     
@@ -88,35 +87,21 @@ def create_app():
         
         # Validate Instagram credentials
         instagram_client = None
-        api_type = 'unknown'
         
         try:
-            # Prefer Graph API if configured
-            if settings.INSTAGRAM_ACCESS_TOKEN and settings.INSTAGRAM_BUSINESS_ACCOUNT_ID:
-                logger.info("Initializing Graph API adapter...")
-                instagram_client = GraphAPIAdapter(
-                    settings.INSTAGRAM_ACCESS_TOKEN,
-                    settings.INSTAGRAM_BUSINESS_ACCOUNT_ID
-                )
-                api_type = 'Graph API'
-                logger.info("Successfully initialized Graph API adapter")
-            
-            # Fallback to legacy credentials
-            elif settings.INSTAGRAM_USERNAME and settings.INSTAGRAM_PASSWORD:
-                logger.warning("Using legacy Instagram credentials (instagrapi)")
-                instagram_client = InstagrapiAdapter()
-                api_type = 'instagrapi (legacy)'
-                logger.info(f"Logging into Instagram as {settings.INSTAGRAM_USERNAME}")
-                instagram_client.login(
-                    settings.INSTAGRAM_USERNAME,
-                    settings.INSTAGRAM_PASSWORD
-                )
-            
-            else:
+            if not settings.INSTAGRAM_USERNAME or not settings.INSTAGRAM_PASSWORD:
                 return jsonify({
                     'success': False,
-                    'error': 'Instagram credentials not configured. Please set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID in .env file.'
+                    'error': 'Instagram credentials not configured. Please set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env file.'
                 }), 503
+            
+            logger.info("Initializing Instagram client...")
+            instagram_client = InstagrapiAdapter()
+            logger.info(f"Logging into Instagram as {settings.INSTAGRAM_USERNAME}")
+            instagram_client.login(
+                settings.INSTAGRAM_USERNAME,
+                settings.INSTAGRAM_PASSWORD
+            )
             
             # Fetch post with comments
             logger.info(f"Fetching post: {post_url}")
@@ -125,6 +110,12 @@ def create_app():
                 comment_limit=comment_limit,
                 include_replies=include_replies
             )
+            
+            if post.error:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to fetch post: {post.error}'
+                }), 400
             
             logger.info(f"Fetched post by @{post.info.username} with {len(post.comments)} comments")
             
@@ -181,19 +172,8 @@ def create_app():
         return jsonify({
             'status': 'ok',
             'gemini_configured': bool(settings.GEMINI_API_KEY),
-            'instagram_graph_api_configured': bool(settings.INSTAGRAM_ACCESS_TOKEN and settings.INSTAGRAM_BUSINESS_ACCOUNT_ID),
-            'instagram_legacy_configured': bool(settings.INSTAGRAM_USERNAME and settings.INSTAGRAM_PASSWORD),
-            'flask_debug': settings.FLASK_DEBUG,
-            'flask_port': settings.FLASK_PORT,
+            'instagram_configured': bool(settings.INSTAGRAM_USERNAME and settings.INSTAGRAM_PASSWORD),
         })
-    
-    @app.route('/api/config/status', methods=['GET'])
-    def config_status():
-        """
-        Detailed configuration status endpoint.
-        Useful for debugging configuration issues.
-        """
-        return jsonify(settings.get_status_dict())
     
     # Register error handlers
     @app.errorhandler(404)
@@ -215,35 +195,24 @@ def main():
     """Run the Flask application."""
     app = create_app()
     
-    # Validate configuration and print warnings
+    # Validate configuration
     print("\n" + "="*60)
-    print("Instagram AI Analyzer - Starting Up (Graph API Edition)")
+    print("Instagram AI Analyzer - Starting Up")
     print("="*60)
     
-    # Instagram configuration
-    if settings.INSTAGRAM_ACCESS_TOKEN and settings.INSTAGRAM_BUSINESS_ACCOUNT_ID:
-        print("✅ Instagram Graph API configured (RECOMMENDED)")
-        token_preview = settings.INSTAGRAM_ACCESS_TOKEN[:8] + "..."
-        print(f"   Token: {token_preview}")
-        print(f"   Account ID: {settings.INSTAGRAM_BUSINESS_ACCOUNT_ID}\n")
-    elif settings.INSTAGRAM_USERNAME and settings.INSTAGRAM_PASSWORD:
-        print("⚠️  WARNING: Using legacy Instagram credentials (instagrapi)")
-        print(f"   Username: {settings.INSTAGRAM_USERNAME}")
-        print("   Please migrate to Graph API as soon as possible.\n")
+    if settings.INSTAGRAM_USERNAME and settings.INSTAGRAM_PASSWORD:
+        print(f"✅ Instagram credentials configured ({settings.INSTAGRAM_USERNAME})")
     else:
         print("❌ ERROR: Instagram credentials not configured.")
-        print("   Please set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID")
-        print("   or legacy INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env file.\n")
+        print("   Please set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env file.")
     
-    # Gemini configuration
     if not settings.GEMINI_API_KEY:
         print("⚠️  WARNING: Gemini API key not configured.")
-        print("   Set GEMINI_API_KEY in .env file.")
-        print("   AI summarization features will be disabled.\n")
+        print("   AI features will be disabled.")
     else:
-        print(f"✅ Gemini API key configured (using model: {settings.GEMINI_MODEL})\n")
+        print(f"✅ Gemini API key configured (using model: {settings.GEMINI_MODEL})")
     
-    print(f"🚀 Starting server on http://0.0.0.0:{settings.FLASK_PORT}")
+    print(f"\n🚀 Starting server on http://0.0.0.0:{settings.FLASK_PORT}")
     print(f"📊 Debug mode: {'ON' if settings.FLASK_DEBUG else 'OFF'}")
     print("="*60 + "\n")
     

@@ -275,6 +275,3 @@ Technical inquiries and bug reports should be directed to the project repository
 - Unit tests for new functionality
 - Updated documentation reflecting changes
 - Adherence to PEP 8 style guidelines
-
-
-
