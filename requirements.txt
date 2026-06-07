@@ -2,8 +2,8 @@
 python-dotenv==1.0.1
 requests==2.32.3
 
-# Instagram unofficial API
-instagrapi==2.1.1
+# Instagram Graph API (Official - no additional packages needed, uses requests)
+# Documentation: https://developers.facebook.com/docs/instagram-api
 
 # Google Gemini AI
 google-genai==1.7.0

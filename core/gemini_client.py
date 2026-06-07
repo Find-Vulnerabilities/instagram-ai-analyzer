@@ -163,7 +163,7 @@ Analyze the above content and provide a structured summary in the following form
 Please write naturally and thoroughly. The summary should be substantive and provide real insight into the community's reaction to this post.
 """
 
-        max_tokens = max(1024, min(8192, max_length // 2))
+        max_tokens = max(1024, min(8192, max_length // 4))
         logger.info(f"Summary request: max_length={max_length} chars -> max_output_tokens={max_tokens}")
         
         return self.generate_text(prompt, temperature=0.5, max_output_tokens=max_tokens)

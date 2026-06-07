@@ -31,7 +31,7 @@ Existing social media analysis tools either require expensive enterprise subscri
 Instagram AI Analyzer solves these problems through a three-stage processing pipeline:
 
 **Stage 1: Data Acquisition**
-The application uses the instagrapi library to authenticate with Instagram and retrieve post metadata, captions, comments, and nested reply threads. The system preserves comment hierarchies and like counts to prioritize influential user feedback.
+The application uses the official Facebook Graph API to authenticate with Instagram and retrieve post metadata, captions, comments, and nested reply threads. This approach ensures maximum stability, reliability, and compliance with Instagram's Terms of Service. The system preserves comment hierarchies and like counts to prioritize influential user feedback.
 
 **Stage 2: AI-Powered Analysis**
 The application submits structured comment data to Google's Gemini API with a purpose-built prompt engineered to extract seven specific analytical dimensions:
@@ -63,7 +63,7 @@ The system returns a categorized JSON response containing all analytical dimensi
 
 **Dependencies:**
 - Flask 3.1.0 (web server framework)
-- instagrapi 2.1.1 (Instagram unofficial API wrapper)
+- instagrapi 2.1.1 (Instagram unofficial API wrapper - DEPRECATED, see README_MIGRATION.md)
 - google-genai 1.7.0 (Gemini API client)
 - python-dotenv 1.0.1 (environment configuration)
 
@@ -188,26 +188,43 @@ Sentiment analysis flags negative sentiment shifts before they escalate, enablin
 ### Limitations and Considerations
 
 **Instagram API Constraints**
-The application uses unofficial API methods via the instagrapi library. This approach:
-- Violates Instagram's Terms of Service for commercial use
-- May result in account rate limiting or temporary bans if used aggressively
-- Requires valid Instagram login credentials stored in plain text configuration
+The application uses the official Facebook Graph API with the following characteristics:
+- ✅ Official API - compliant with Instagram Terms of Service
+- ✅ Production stable - includes automatic retry logic and rate limiting
+- ⚠️ Requires Business Account setup and long-lived access token
+- ⚠️ Subject to Facebook rate limits (typically generous for business accounts)
 
 **Gemini API Rate Limits**
 Google's free tier of Gemini API permits approximately 60 requests per minute. Production deployments require a paid tier for high-volume analysis.
 
 **Comment Fetching Limits**
-Instagram's API restricts comment retrieval to approximately 200 comments per post without pagination workarounds. For posts exceeding 1000 comments, the analysis samples the most recent comments only.
+The Graph API retrieves comments in ranked order (most relevant first). For posts exceeding the default limit, pagination is supported. The application samples the top-ranked comments to maximize relevance.
 
 **Language Support**
 Gemini AI performs optimally with English-language comments. Non-English content may produce less accurate sentiment analysis.
 
 ---
 
+### Recent Updates
+
+**Migration from instagrapi to Graph API (v2.0)**
+- ✅ Now uses official Facebook Graph API instead of unofficial instagrapi
+- ✅ Built-in retry logic with exponential backoff
+- ✅ Intelligent rate limit handling
+- ✅ Connection pooling for better performance
+- ✅ Zero account risk - fully compliant with ToS
+- ⚠️ Requires Business Account setup (see README_MIGRATION.md)
+
+For legacy setup instructions and backward compatibility info, see [README_MIGRATION.md](README_MIGRATION.md)
+
+---
+
 ### Troubleshooting
 
-**Error: "Instagram login failed"**
-- Verify username and password in .env file
+**Error: "Invalid access token"**
+- Verify INSTAGRAM_ACCESS_TOKEN is valid and hasn't expired
+- Generate a new token from Facebook App Dashboard
+- See README_MIGRATION.md for detailed setup instructions
 - Check if Instagram account requires two-factor authentication (not supported)
 - Temporarily disable VPN or proxy services
 
@@ -223,7 +240,7 @@ Gemini AI performs optimally with English-language comments. Non-English content
 
 **Application fails to start**
 - Verify Python version 3.10 or higher: `python --version`
-- Confirm all dependencies installed: `pip list | grep -E "flask|instagrapi|google-genai"`
+- Confirm all dependencies installed: `pip list | grep -E "flask|requests|google-genai"`
 - Check that port 5000 is not already occupied: `lsof -i :5000` (Linux/macOS) or `netstat -ano | findstr :5000` (Windows)
 
 ---

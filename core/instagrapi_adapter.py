@@ -5,6 +5,8 @@ Use responsibly and only for personal, non-commercial purposes.
 """
 
 import logging
+import random
+import os
 from typing import List, Optional
 from datetime import datetime
 
@@ -15,7 +17,7 @@ from models.comment import Comment
 # Try to import instagrapi, provide helpful error if not installed
 try:
     from instagrapi import Client
-    from instagrapi.exceptions import LoginRequired, ClientError
+    from instagrapi.exceptions import LoginRequired, ClientError, ChallengeError
 except ImportError:
     raise ImportError(
         "instagrapi is not installed. Run: pip install instagrapi"
@@ -35,6 +37,22 @@ class InstagrapiAdapter(InstagramClient):
     Your account may be banned if used aggressively or for commercial purposes.
     """
     
+    # Realistic User-Agents to avoid detection
+    USER_AGENTS = [
+        # iPhone 15 Pro - iOS 17
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        # iPhone 14 - iOS 16
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+        # iPhone 13 - iOS 15
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 15_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Mobile/15E148 Safari/604.1",
+        # Google Pixel 7 - Android 13
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+        # Samsung Galaxy S23 - Android 13
+        "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+        # OnePlus 11 - Android 13
+        "Mozilla/5.0 (Linux; Android 13; CPH2447) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+    ]
+    
     def __init__(self, session_file: Optional[str] = "session.json"):
         """
         Initialize the instagrapi client.
@@ -47,12 +65,28 @@ class InstagrapiAdapter(InstagramClient):
         self._is_logged_in = False
         self._username = None
         self._password = None
+        self._current_user_agent = None
         
     @property
     def client(self):
-        """Lazy initialization of instagrapi client."""
+        """Lazy initialization of instagrapi client with realistic User-Agent."""
         if self._client is None:
             self._client = Client()
+            
+            # Randomly select a User-Agent to avoid fingerprinting
+            self._current_user_agent = random.choice(self.USER_AGENTS)
+            self._client.set_user_agent(self._current_user_agent)
+            
+            # Set other important parameters to mimic real device
+            self._client.set_country("US")
+            self._client.set_locale("en_US")
+            self._client.set_timezone_offset(0)
+            
+            # Add delay between requests to avoid rate limiting
+            self._client.delay_range = [1, 3]  # 1-3 seconds between requests
+            
+            logger.info(f"Instagrapi client initialized with User-Agent: {self._current_user_agent[:60]}...")
+            
         return self._client
     
     def login(self, username: str, password: str) -> bool:
@@ -75,16 +109,27 @@ class InstagrapiAdapter(InstagramClient):
         self._username = username
         self._password = password
         
-        try:
-            # Try to load existing session
-            if self._session_file:
+        # Try to load existing session first
+        if self._session_file and os.path.exists(self._session_file):
+            try:
+                self.client.load_settings(self._session_file)
+                # Verify session is still valid
+                self.client.user_id
+                self._is_logged_in = True
+                logger.info("Loaded valid session from file")
+                return True
+            except Exception as e:
+                logger.warning(f"Session file exists but is invalid: {e}")
+                # Remove corrupted session file
                 try:
-                    self.client.load_settings(self._session_file)
-                    logger.info("Loaded session from file")
-                except Exception as e:
-                    logger.debug(f"No existing session found: {e}")
-            
-            # Perform login
+                    os.remove(self._session_file)
+                    logger.info("Removed corrupted session file")
+                except Exception:
+                    pass
+        
+        # Perform fresh login
+        try:
+            logger.info(f"Performing fresh login for {username}")
             self.client.login(username, password)
             self._is_logged_in = True
             
@@ -92,16 +137,38 @@ class InstagrapiAdapter(InstagramClient):
             if self._session_file:
                 try:
                     self.client.dump_settings(self._session_file)
-                    logger.info("Session saved to file")
+                    logger.info(f"Session saved to {self._session_file}")
                 except Exception as e:
                     logger.warning(f"Failed to save session: {e}")
-                
-                
+                    
             logger.info(f"Successfully logged in as {username}")
             return True
             
-        except (LoginRequired, ClientError) as e:
-            raise InstagramClientError(f"Login failed: {str(e)}")
+        except ChallengeError as e:
+            raise InstagramClientError(
+                f"Instagram requires verification. Please:\n"
+                f"1. Log into instagram.com from a web browser\n"
+                f"2. Complete any security challenges\n"
+                f"3. Check your email for verification links\n"
+                f"Technical details: {e}"
+            )
+        except LoginRequired as e:
+            raise InstagramClientError(f"Login failed: Invalid username or password. Error: {e}")
+        except ClientError as e:
+            error_msg = str(e)
+            if "rate_limit" in error_msg.lower():
+                raise InstagramClientError(
+                    f"Rate limited by Instagram. Please wait 5-10 minutes before trying again.\n"
+                    f"Technical details: {e}"
+                )
+            elif "challenge" in error_msg.lower():
+                raise InstagramClientError(
+                    f"Instagram security challenge detected.\n"
+                    f"Please log into instagram.com from a browser to complete verification.\n"
+                    f"Technical details: {e}"
+                )
+            else:
+                raise InstagramClientError(f"Login failed: {error_msg}")
         except Exception as e:
             raise InstagramClientError(f"Unexpected error during login: {str(e)}")
     
@@ -143,6 +210,17 @@ class InstagrapiAdapter(InstagramClient):
         
         return False
     
+    def _ensure_valid_session(self) -> None:
+        """
+        Ensure session is valid before making API calls.
+        Raises InstagramClientError if session cannot be established.
+        """
+        if not self.refresh_session():
+            raise InstagramClientError(
+                "Instagram session is invalid and could not be refreshed. "
+                "Please check your credentials and try again."
+            )
+    
     def get_post_by_url(self, url: str) -> Optional[PostInfo]:
         """
         Fetch basic post information by URL.
@@ -153,8 +231,7 @@ class InstagrapiAdapter(InstagramClient):
         Returns:
             Optional[PostInfo]: Post info or None if not found
         """
-        if not self._is_logged_in:
-            raise InstagramClientError("Not logged in. Call login() first.")
+        self._ensure_valid_session()
         
         try:
             # Extract shortcode from URL and get media info
@@ -193,8 +270,7 @@ class InstagrapiAdapter(InstagramClient):
         Returns:
             List[Comment]: List of Comment objects
         """
-        if not self._is_logged_in:
-            raise InstagramClientError("Not logged in. Call login() first.")
+        self._ensure_valid_session()
         
         comments = []
         
@@ -262,8 +338,7 @@ class InstagrapiAdapter(InstagramClient):
         Returns:
             Post: Complete post object with comments
         """
-        if not self._is_logged_in:
-            raise InstagramClientError("Not logged in. Call login() first.")
+        self._ensure_valid_session()
         
         # Fetch post info
         post_info = self.get_post_by_url(post_url)
@@ -288,6 +363,11 @@ class InstagrapiAdapter(InstagramClient):
     def close(self) -> None:
         """Close the client connection and clean up resources."""
         if self._client:
+            # instagrapi doesn't have an explicit close method
+            # but we can clear the client
+            self._client = None
+        self._is_logged_in = False
+        logger.info("Instagrapi adapter closed")
             # instagrapi doesn't have an explicit close method
             # but we can clear the client
             self._client = None
